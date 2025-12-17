@@ -69,6 +69,13 @@ namespace Opc.Ua.Com.Client
                 // check the application certificate.
                 await application.CheckApplicationInstanceCertificate(false, 0);
 
+                #if DEBUG
+                
+                // run the application interactively.
+                Application.Run(new ServerForm(application));
+
+                #else
+
                 // start the server.
                 await application.Start(new ComWrapperServer());
 

@@ -30,6 +30,8 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Runtime.InteropServices;
+using Opc.Ua.Configuration;
 using Opc.Ua.Server;
 
 namespace Opc.Ua.Com.Client
@@ -251,6 +253,20 @@ namespace Opc.Ua.Com.Client
                 }
             }
 
+            var userNameCreator = new UserNameCreator(Configuration.ApplicationName);
+
+            Utils.Trace("Loading users");
+
+            Dictionary<string, UserNameIdentityToken> users = UserNameCreator.LoadUserName(Configuration.ApplicationName);
+
+            Utils.Trace("Total users {0}", users.Count);
+
+            if (users.Count == 0)
+            {
+                Utils.Trace("Adding users");
+                userNameCreator.Add(Configuration.ApplicationName, "someusername", "YourStrong!Passw0rd");
+            }
+
             m_userNameValidator = new UserNameValidator(Configuration.ApplicationName);
 
             base.OnNodeManagerStarted(server);
@@ -272,7 +288,6 @@ namespace Opc.Ua.Com.Client
         /// <param name="server">The server.</param>
         protected override void OnServerStarted(IServerInternal server)
         {
-            base.OnServerStarted(server);
             // verify session
             this.ServerInstance.SessionManager.ImpersonateUser += SessionManager_ImpersonateUser;
         }
@@ -290,7 +305,9 @@ namespace Opc.Ua.Com.Client
 
                     UserNameIdentityToken token = args.NewIdentity as UserNameIdentityToken;
 
-                    if (!m_userNameValidator.Validate(token))
+                    bool validUser = VerifyPassword(token.UserName, token.DecryptedPassword);
+
+                    if (!validUser && !m_userNameValidator.Validate(token))
                     {   // Bad user access denied.
                         // construct translation object with default text.
                         TranslationInfo info = new TranslationInfo(
@@ -312,11 +329,51 @@ namespace Opc.Ua.Com.Client
             }
         }
 
+        /// <summary>
+        /// Validates the password for a username token.
+        /// </summary>
+        private bool VerifyPassword(string userName, string password)
+        {
+            IntPtr handle = IntPtr.Zero;
+
+            const int LOGON32_PROVIDER_DEFAULT = 0;
+            // const int LOGON32_LOGON_INTERACTIVE = 2;
+            const int LOGON32_LOGON_NETWORK = 3;
+            // const int LOGON32_LOGON_BATCH = 4;
+
+            bool result = NativeMethods.LogonUser(
+                userName,
+                String.Empty,
+                password,
+                LOGON32_LOGON_NETWORK,
+                LOGON32_PROVIDER_DEFAULT,
+                ref handle);
+
+            NativeMethods.CloseHandle(handle);
+
+            return result;
+        }
+
         #endregion
 
         #region Private Fields
         private List<string> m_availableLocales;
         private UserNameValidator m_userNameValidator;
         #endregion
+
+        private static class NativeMethods
+        {
+            [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+            public static extern bool LogonUser(
+                string lpszUsername,
+                string lpszDomain,
+                string lpszPassword,
+                int dwLogonType,
+                int dwLogonProvider,
+                ref IntPtr phToken);
+
+            [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+            public extern static bool CloseHandle(IntPtr handle);
+        }
     }
 }

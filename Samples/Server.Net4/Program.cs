@@ -54,7 +54,7 @@ namespace Opc.Ua.Sample
 
             try
             {
-                application.LoadApplicationConfiguration(false).Wait();
+                application.LoadApplicationConfiguration(true).Wait();
 
                 // check the application certificate.
                 bool certOK = application.CheckApplicationInstanceCertificate(false, 0).Result;
